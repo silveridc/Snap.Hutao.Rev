@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -74,7 +74,7 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Checkout genshin-fps-unlock
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.FPS_UNLOCK_REPO }}
           ref: ${{ env.FPS_UNLOCK_SHA }}
@@ -139,7 +139,7 @@ jobs:
           Copy-Item $built $target -Force
 
       - name: Checkout UnlockerIsland
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.ISLAND_REPO }}
           ref: ${{ env.ISLAND_SHA }}
@@ -262,7 +262,7 @@ jobs:
           Copy-Item $built $target -Force
 
       - name: Checkout Yae
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.YAE_REPO }}
           ref: ${{ env.YAE_SHA }}
