@@ -1,0 +1,13 @@
+// Copyright (c) zhaoyj. All rights reserved.
+// Licensed under the MIT license.
+
+namespace Snap.Hutao.Rev.Web.Hutao.Strategy;
+
+internal sealed class Strategy
+{
+    [JsonPropertyName("mys_strategy_id")]
+    public int? MysStrategyId { get; set; }
+
+    [JsonPropertyName("hoyolab_strategy_id")]
+    public int? HoyolabStrategyId { get; set; }
+}

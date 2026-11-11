@@ -1,0 +1,52 @@
+<Project>
+
+  <!--
+    版本号唯一来源：Snap.Hutao\Package.appxmanifest 的 <Identity Version="..." />。
+    - 程序集版本(HutaoRuntime.Version 读取的那个，用于自更新比对/UserAgent/显示)在构建时从该清单读取并写入。
+    - CI 可用 -p:HutaoVersion=1.2.3.4 覆盖清单值。
+    - AppVeyor / SignPath 流水线本身也是从该清单读取版本，故保持单一来源。
+    发版时只改 Package.appxmanifest（顺带把 Package.development.appxmanifest 改成同号）即可。
+  -->
+  <PropertyGroup>
+    <_HutaoAppxManifest>$(MSBuildThisFileDirectory)Snap.Hutao\Package.appxmanifest</_HutaoAppxManifest>
+  </PropertyGroup>
+
+  <!-- 代码风格检查：规则与开关全部在仓库根目录的 .editorconfig 里，这里只挂分析器 -->
+  <PropertyGroup>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- 源生成器产出的虚拟文件不在 .editorconfig 的作用域内，那三条文档规则只能在这里关；
+         .editorconfig 里它们对本仓库的手写代码也已经是 none，所以没有漏检。 -->
+    <NoWarn>$(NoWarn);SA1600;SA1601;SA1633</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StyleCop.Analyzers.Unstable" Version="1.2.0.556" PrivateAssets="all" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" />
+  </ItemGroup>
+
+  <!-- 显式传入 HutaoVersion（CI 覆盖）时直接采用 -->
+  <PropertyGroup Condition="'$(HutaoVersion)' != '' and '$(MSBuildProjectName)' == 'Snap.Hutao'">
+    <Version>$(HutaoVersion)</Version>
+    <AssemblyVersion>$(HutaoVersion)</AssemblyVersion>
+    <FileVersion>$(HutaoVersion)</FileVersion>
+  </PropertyGroup>
+
+  <!-- 否则从 appxmanifest 读取 Identity/@Version，作为唯一版本来源 -->
+  <Target Name="ResolveHutaoVersionFromManifest"
+          BeforeTargets="GetAssemblyVersion;GetAssemblyAttributes;CoreGenerateAssemblyInfo;BeforeCompile"
+          Condition="'$(HutaoVersion)' == '' and '$(MSBuildProjectName)' == 'Snap.Hutao' and Exists('$(_HutaoAppxManifest)')">
+    <XmlPeek XmlInputPath="$(_HutaoAppxManifest)"
+             Query="/pkg:Package/pkg:Identity/@Version"
+             Namespaces="&lt;Namespace Prefix='pkg' Uri='http://schemas.microsoft.com/appx/manifest/foundation/windows10' /&gt;">
+      <Output TaskParameter="Result" PropertyName="HutaoVersion" />
+    </XmlPeek>
+    <PropertyGroup>
+      <Version>$(HutaoVersion)</Version>
+      <AssemblyVersion>$(HutaoVersion)</AssemblyVersion>
+      <FileVersion>$(HutaoVersion)</FileVersion>
+    </PropertyGroup>
+    <Message Importance="high" Text="[Snap.Hutao] 版本号取自清单 = $(HutaoVersion)" />
+  </Target>
+
+</Project>

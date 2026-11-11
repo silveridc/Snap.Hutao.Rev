@@ -1,0 +1,142 @@
+<Project>
+
+  <!--
+    Debug-only pseudo-incremental cache for the WinUI markup pipeline.
+
+    MarkupCompilePass1 and MarkupCompilePass2 declare no Inputs/Outputs, and XamlPreCompile's
+    Inputs contain the App.g.cs that pass1 rewrites every build, so all three recompile every
+    page each time (measured: ~43s of a ~48s no-op build). Each of them only runs when @(Page)
+    or @(ApplicationDefinition) is non-empty, which is the lever used here: on a cache hit the
+    probe hides both lists for the duration of the pipeline, re-feeds the code-behind the last
+    full build generated, and the finish target puts the items back before CoreCompile.
+
+    Invalidation is MSBuild's own timestamp check over the page files, the project file, the
+    restore graph, and two fingerprint files that only advance when code generation inputs or
+    the reference set actually change. Whether a previous full build produced usable output is
+    carried by the existence of the code-behind and .xbf lists rather than by a property,
+    because the dotnet CLI's build server keeps target-set properties alive between invocations.
+
+    The generated .xbf files are part of the cached output because the PRI step moves them out
+    of the intermediate directory after CopyGeneratedXaml has consumed them: without putting
+    them back the next skipped build would fail with MSB3030.
+
+    Editing a .cs file is deliberately a cache hit - that is the case this exists for. If such
+    an edit makes a compiled binding stale the stale code-behind fails to compile and says so;
+    build once with -p:XamlPipelineCache=false to refresh. Release builds never take this path.
+  -->
+
+  <Target Name="XamlPipelineFingerprint">
+
+    <PropertyGroup>
+      <XamlPipelineCacheDir>$(IntermediateOutputPath)xamlpipeline\</XamlPipelineCacheDir>
+      <XamlPipelineCodegenPath>$(XamlPipelineCacheDir)codegen</XamlPipelineCodegenPath>
+      <XamlPipelineReferenceListPath>$(XamlPipelineCacheDir)references</XamlPipelineReferenceListPath>
+      <XamlPipelineStampPath>$(XamlPipelineCacheDir)stamp</XamlPipelineStampPath>
+      <XamlPipelineCompileListPath>$(XamlPipelineCacheDir)compilelist</XamlPipelineCompileListPath>
+      <XamlPipelinePageListPath>$(XamlPipelineCacheDir)pagelist</XamlPipelinePageListPath>
+      <XamlPipelineXbfCacheDir>$(XamlPipelineCacheDir)xbf\</XamlPipelineXbfCacheDir>
+    </PropertyGroup>
+
+    <PropertyGroup>
+      <_XamlPipelineCodegen>PriIndexName=$(PriIndexName);RootNamespace=$(RootNamespace);AssemblyName=$(AssemblyName);TargetFramework=$(TargetFramework);RuntimeIdentifier=$(RuntimeIdentifier);OutputType=$(OutputType);TargetPlatformMinVersion=$(TargetPlatformMinVersion);XamlLanguage=$(XamlLanguage);XamlResourceMapName=$(XamlResourceMapName);XamlComponentResourceLocation=$(XamlComponentResourceLocation);XamlCodeGenerationControlFlags=$(XamlCodeGenerationControlFlags);GenXbfPath=$(GenXbfPath);DisableXbfGeneration=$(DisableXbfGeneration);DisableXbfLineInfo=$(DisableXbfLineInfo);UseXamlCompilerExecutable=$(UseXamlCompilerExecutable);SuppressXamlWarnings=$(SuppressXamlWarnings);EnabledXamlOptionalChanges=$(EnabledXamlOptionalChanges);DisabledXamlOptionalChanges=$(DisabledXamlOptionalChanges);DefineConstants=$(DefineConstants);XamlFeatureControlFlags=@(XamlFeatureControlFlags->'%(Identity)', ',')</_XamlPipelineCodegen>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(XamlPipelineCacheDir)" />
+
+    <!-- WriteOnlyWhenDifferent keeps the timestamp still, so an unchanged value is not an input change. -->
+    <WriteLinesToFile File="$(XamlPipelineCodegenPath)" Lines="$(_XamlPipelineCodegen)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <WriteLinesToFile File="$(XamlPipelineReferenceListPath)" Lines="@(ReferencePath->'%(FullPath)', '|')" Overwrite="true" WriteOnlyWhenDifferent="true" />
+
+    <!-- The page list is an input so that deleting a page invalidates too; no timestamp of a
+         remaining file moves in that case. Skipped while the probe holds the list back, which
+         would otherwise record the hidden (empty) list and invalidate every following build. -->
+    <WriteLinesToFile Condition="'@(_XamlPipelineHiddenPage)' == '' And '@(_XamlPipelineHiddenAppDef)' == ''"
+                      File="$(XamlPipelinePageListPath)" Overwrite="true" WriteOnlyWhenDifferent="true"
+                      Lines="@(Page->'%(FullPath)');@(ApplicationDefinition->'%(FullPath)')" />
+  </Target>
+
+  <Target Name="XamlPipelineInvalidate" DependsOnTargets="XamlPipelineFingerprint"
+          Inputs="@(Page->'%(FullPath)');@(ApplicationDefinition->'%(FullPath)');$(MSBuildProjectFullPath);$(ProjectAssetsFile);$(XamlPipelineCodegenPath);$(XamlPipelineReferenceListPath);$(XamlPipelinePageListPath)"
+          Outputs="$(XamlPipelineStampPath)">
+
+    <Delete Files="$(XamlPipelineCompileListPath)" />
+    <RemoveDir Directories="$(XamlPipelineXbfCacheDir)" />
+    <Touch Files="$(XamlPipelineStampPath)" AlwaysCreate="true" />
+  </Target>
+
+  <Target Name="XamlPipelineProbe" BeforeTargets="MarkupCompilePass1" DependsOnTargets="XamlPipelineInvalidate"
+          Condition="'$(Configuration)' == 'Debug' And '$(XamlPipelineCache)' != 'false' And '$(DesignTimeBuild)' != 'true' And ('@(Page)' != '' Or '@(ApplicationDefinition)' != '')">
+
+    <ReadLinesFromFile File="$(XamlPipelineCompileListPath)" Condition="Exists('$(XamlPipelineCompileListPath)')">
+      <Output TaskParameter="Lines" ItemName="_XamlPipelineStoredCompile" />
+    </ReadLinesFromFile>
+
+    <ItemGroup>
+      <_XamlPipelineMissingCompile Include="@(_XamlPipelineStoredCompile)" Condition="!Exists('%(Identity)')" />
+      <_XamlPipelineCachedXbf Include="$(XamlPipelineXbfCacheDir)**\*.xbf" />
+    </ItemGroup>
+
+    <!-- Reset first: a hit flag left over from an earlier invocation of the reused build node
+         would make a miss restore an empty page list and a full build report a skipped one. -->
+    <PropertyGroup>
+      <XamlPipelineCacheHit>false</XamlPipelineCacheHit>
+      <XamlPipelineCacheHit Condition="'@(_XamlPipelineStoredCompile)' != '' And '@(_XamlPipelineMissingCompile)' == '' And '@(_XamlPipelineCachedXbf)' != ''">true</XamlPipelineCacheHit>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(XamlPipelineCacheHit)' == 'true'">
+      <_XamlPipelineHiddenPage Include="@(Page)" />
+      <_XamlPipelineHiddenAppDef Include="@(ApplicationDefinition)" />
+      <Page Remove="@(_XamlPipelineHiddenPage)" />
+      <ApplicationDefinition Remove="@(_XamlPipelineHiddenAppDef)" />
+      <Compile Include="@(_XamlPipelineStoredCompile)" />
+      <FileWrites Include="@(_XamlPipelineStoredCompile)" />
+    </ItemGroup>
+
+    <Message Importance="high" Condition="'$(XamlPipelineCacheHit)' == 'true'"
+             Text="XamlPipelineCache: hit - markup compilation skipped, @(_XamlPipelineStoredCompile->Count()) code-behind files and @(_XamlPipelineCachedXbf->Count()) .xbf files reused." />
+    <Message Importance="high" Condition="'$(XamlPipelineCacheHit)' != 'true'"
+             Text="XamlPipelineCache: miss - compiling markup." />
+  </Target>
+
+  <Target Name="XamlPipelineFinish" BeforeTargets="CoreCompile" DependsOnTargets="XamlPipelineFingerprint"
+          Condition="'$(Configuration)' == 'Debug' And '$(XamlPipelineCache)' != 'false' And '$(DesignTimeBuild)' != 'true'">
+
+    <ItemGroup Condition="'$(XamlPipelineCacheHit)' == 'true'">
+      <Page Include="@(_XamlPipelineHiddenPage)" />
+      <ApplicationDefinition Include="@(_XamlPipelineHiddenAppDef)" />
+    </ItemGroup>
+
+    <!-- Put the markup output the last full build produced back where CopyGeneratedXaml reads it. -->
+    <MakeDir Directories="$(XamlGeneratedOutputPath)" Condition="'$(XamlPipelineCacheHit)' == 'true'" />
+    <Copy Condition="'$(XamlPipelineCacheHit)' == 'true'"
+          SourceFiles="@(_XamlPipelineCachedXbf)"
+          DestinationFiles="@(_XamlPipelineCachedXbf->'$(XamlGeneratedOutputPath)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <ItemGroup Condition="'$(XamlPipelineCacheHit)' != 'true'">
+      <_XamlPipelineGenerated Include="@(_GeneratedCodeFiles->'%(FullPath)')" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(XamlPipelineCompileListPath)" Lines="@(_XamlPipelineGenerated)" Overwrite="true"
+                      Condition="'$(XamlPipelineCacheHit)' != 'true' And '@(_XamlPipelineGenerated)' != ''" />
+
+    <ItemGroup Condition="'$(XamlPipelineCacheHit)' != 'true'">
+      <_XamlPipelineBuiltXbf Include="$(XamlGeneratedOutputPath)**\*.xbf"
+                             Exclude="$(XamlGeneratedOutputPath)embed\**\*.xbf;$(XamlGeneratedOutputPath)intermediatexaml\**\*.xbf;$(XamlGeneratedOutputPath)xamlpipeline\**\*.xbf;$(XamlGeneratedOutputPath)AppX\**\*.xbf" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(XamlPipelineXbfCacheDir)" Condition="'@(_XamlPipelineBuiltXbf)' != ''" />
+    <Copy Condition="'@(_XamlPipelineBuiltXbf)' != ''"
+           SourceFiles="@(_XamlPipelineBuiltXbf)"
+           DestinationFiles="@(_XamlPipelineBuiltXbf->'$(XamlPipelineXbfCacheDir)%(RecursiveDir)%(Filename)%(Extension)')"
+           SkipUnchangedFiles="true" />
+
+    <Message Importance="high" Condition="'$(XamlPipelineCacheHit)' != 'true'"
+             Text="XamlPipelineCache: cached @(_XamlPipelineBuiltXbf->Count()) generated .xbf files for the next build." />
+  </Target>
+
+  <Target Name="XamlPipelineDropCache" AfterTargets="Clean" Condition="'$(Configuration)' == 'Debug'">
+    <RemoveDir Directories="$(IntermediateOutputPath)xamlpipeline\" />
+  </Target>
+
+</Project>

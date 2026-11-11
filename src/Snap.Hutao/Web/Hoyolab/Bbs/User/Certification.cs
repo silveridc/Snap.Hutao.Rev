@@ -1,0 +1,13 @@
+// Copyright (c) zhaoyj. All rights reserved.
+// Licensed under the MIT license.
+
+namespace Snap.Hutao.Rev.Web.Hoyolab.Bbs.User;
+
+internal class Certification
+{
+    [JsonPropertyName("type")]
+    public int Type { get; set; }
+
+    [JsonPropertyName("label")]
+    public string Label { get; set; } = default!;
+}
