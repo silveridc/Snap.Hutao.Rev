@@ -1,0 +1,18 @@
+// Copyright (c) zhaoyj. All rights reserved.
+// Licensed under the MIT license.
+
+namespace Snap.Hutao.Rev.Web.Endpoint.Hutao;
+
+internal interface IHomaEndpoints :
+    IHomaGachaLogEndpoints,
+    IHomaServiceEndpoints,
+    IHomaPassportEndpoints,
+    IHomaSpiralAbyssEndpoints,
+    IHomaRoleCombatEndpoints,
+    IHomaRedeemCodeEndpoints
+{
+    public string HomaWebsite(string path)
+    {
+        return $"{Root}/{path}";
+    }
+}

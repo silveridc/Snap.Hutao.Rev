@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <Configurations>Debug;Release</Configurations>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.14" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="MSTest.TestAdapter" Version="4.5.1" />
+    <PackageReference Include="MSTest.TestFramework" Version="4.5.1" />
+    <PackageReference Include="coverlet.collector" Version="10.1.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Threading.RateLimiting" Version="10.0.14" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\..\..\ServerHosts.cs" Link="Linked\ServerHosts.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\Snap.Hutao\Web\Endpoint\Hutao\IHomaRootAccess.cs" Link="Linked\IHomaRootAccess.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\Snap.Hutao\Web\Endpoint\Hutao\IHomaServiceEndpoints.cs" Link="Linked\IHomaServiceEndpoints.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\Snap.Hutao\Web\Endpoint\Hutao\IHomaPassportEndpoints.cs" Link="Linked\IHomaPassportEndpoints.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\Snap.Hutao\Web\Endpoint\Hutao\IInfrastructureRootAccess.cs" Link="Linked\IInfrastructureRootAccess.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\Snap.Hutao\Web\Endpoint\Hutao\IInfrastructureRawRootAccess.cs" Link="Linked\IInfrastructureRawRootAccess.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\Snap.Hutao\Web\Endpoint\Hutao\IInfrastructureFeatureEndpoints.cs" Link="Linked\IInfrastructureFeatureEndpoints.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\Snap.Hutao\Web\Endpoint\Hutao\IInfrastructurePatchEndpoints.cs" Link="Linked\IInfrastructurePatchEndpoints.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\Snap.Hutao\Web\Endpoint\Hutao\IInfrastructureManagementEndpoints.cs" Link="Linked\IInfrastructureManagementEndpoints.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\Snap.Hutao\Web\Endpoint\Hutao\IInfrastructureGitRepositoryEndpoints.cs" Link="Linked\IInfrastructureGitRepositoryEndpoints.cs" />
+  </ItemGroup>
+
+</Project>

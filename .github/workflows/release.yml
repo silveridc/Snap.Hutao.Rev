@@ -1,0 +1,451 @@
+name: HutaoLauncher Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  # Resource/FpsUnlock/UnlockerStub.dll 的来源，按 commit 固定以便主动升级
+  FPS_UNLOCK_REPO: 34736384/genshin-fps-unlock
+  FPS_UNLOCK_SHA: 2b85d61dd06f6e11ad86fdd6bd90339f9abc58eb
+  # Resource/Island/Snap.Hutao.Remastered.UnlockerIsland.dll 的来源
+  ISLAND_REPO: SnapHutaoRemasteringProject/Snap.Hutao.Remastered.UnlockerIsland
+  ISLAND_SHA: fd779c0366394d9a3b510f69be21e45dbcd28b22
+  # Resource/Yae/YaeAchievementLib.dll 的来源（原本是 Yae.Lib NuGet 包里的同一个 commit 的产物）
+  YAE_REPO: HolographicHat/Yae
+  YAE_SHA: ccff7a1702ec0a124e49c883e792761b0fe3a35b
+  # 上游 vcpkg.json 里没有 builtin-baseline，还原 MinHook 时补一个固定的 vcpkg commit
+  VCPKG_BASELINE: a5f736224e85b32e25a8ffc52562333180396642
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/Snap.Hutao.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.ref_type }}' -eq 'tag') {
+            $version = '${{ github.ref_name }}' -replace '^v', ''
+          } else {
+            # 清单是 UTF-8 且含中文，Windows PowerShell 默认按 ANSI 读会把标签读坏
+            [xml]$manifest = Get-Content 'src/Snap.Hutao/Snap.Hutao/Package.appxmanifest' -Raw -Encoding utf8
+            $version = $manifest.Package.Identity.Version
+          }
+
+          if ($version -notmatch '^\d+\.\d+\.\d+\.\d+$') {
+            throw "版本号 '$version' 不符合 MSIX 要求的四段式 major.minor.build.revision。"
+          }
+
+          foreach ($part in $version.Split('.')) {
+            if ([int]$part -gt 65535) {
+              throw "版本号分段 '$part' 超出 MSIX 允许的上限 65535。"
+            }
+          }
+
+          Write-Output "版本号 = $version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Checkout genshin-fps-unlock
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.FPS_UNLOCK_REPO }}
+          ref: ${{ env.FPS_UNLOCK_SHA }}
+          path: fps-unlock-src
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Use the session local mapping name
+        shell: pwsh
+        run: |
+          # 创建 Global\ 映射需要 SeCreateGlobalPrivilege，启动器（非提权、非 AppContainer）没有这个权限，
+          # CreateOrOpen 直接抛 "Cannot create file mapping"，解帧因此在启动器里整体失效。
+          # 会话内名字够用：游戏和启动器同会话，注入只是把模块放进游戏进程。
+          $file = 'fps-unlock-src/UnlockerStub/dllmain.cpp'
+          $text = [System.IO.File]::ReadAllText($file)
+          $from = '"Global\\2DE95FDC-6AB7-4593-BFE6-760DD4AB422B"'
+          $to = '"2DE95FDC-6AB7-4593-BFE6-760DD4AB422B"'
+
+          $hits = [regex]::Matches($text, [regex]::Escape($from)).Count
+          if ($hits -ne 1) {
+            throw "在 $file 中找到 $hits 处 '$from'，与补丁预期不符，请不要盲目发布"
+          }
+
+          [System.IO.File]::WriteAllText($file, $text.Replace($from, $to))
+          Write-Output '共享内存名已改为会话内名字'
+
+      - name: Build UnlockerStub.dll
+        shell: pwsh
+        run: |
+          $srcDir = (Resolve-Path fps-unlock-src).Path + '\'
+          $outDir = (Join-Path $env:GITHUB_WORKSPACE 'stub-out') + '\'
+
+          # vcxproj 里只有 x64 是 DynamicLibrary，Win32 那些配置是 Application，不碰 exe 项目
+          msbuild ($srcDir + 'UnlockerStub\UnlockerStub.vcxproj') `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            "/p:SolutionDir=$srcDir" `
+            "/p:OutDir=$outDir"
+          if ($LASTEXITCODE -ne 0) {
+            throw "msbuild 失败，退出码 $LASTEXITCODE"
+          }
+
+          $built = $outDir + 'UnlockerStub.dll'
+          if (-not (Test-Path $built)) {
+            throw "msbuild 成功但没有产出 $built"
+          }
+
+          # 这个共享内存名是和 FpsUnlockInterop.cs 对接的唯一契约，
+          # 上游一旦改名就要在这里失败，而不是打出一个静默失效的解帧包
+          $text = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($built))
+          if (-not $text.Contains('2DE95FDC-6AB7-4593-BFE6-760DD4AB422B')) {
+            throw '构建出的 UnlockerStub.dll 缺少共享内存名，IPC 契约已与本项目不匹配'
+          }
+
+          if ($text.Contains('Global\2DE95FDC')) {
+            throw '构建出的 UnlockerStub.dll 仍在打开 Global\ 映射，上面的改名补丁没有生效'
+          }
+
+          $target = 'src/Snap.Hutao/Snap.Hutao/Resource/FpsUnlock/UnlockerStub.dll'
+          Write-Output "用构建产物覆盖 $target（$((Get-Item $built).Length) 字节）"
+          Copy-Item $built $target -Force
+
+      - name: Checkout UnlockerIsland
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.ISLAND_REPO }}
+          ref: ${{ env.ISLAND_SHA }}
+          path: island-src
+
+      - name: Gate the Island frame limit hook
+        shell: pwsh
+        run: |
+          # 限帧继续由 UnlockerStub 负责，注入给 Island 的 EnableSetFps 恒为 0。
+          # 上游默认无条件创建 GetFrameCount 钩子，会和 stub 抢同一个函数，
+          # 这里把它门控掉；命中数不是 1 就说明上游改过这段，必须人工确认。
+          $file = 'island-src/src/Snap.Hutao.Remastered.UnlockerIsland/function/EnableSetFps.cpp'
+          $text = [System.IO.File]::ReadAllText($file)
+          $from = 'if (g_pEnv->Offsets.GetFps)'
+          $to = 'if (g_pEnv->EnableSetFps && g_pEnv->Offsets.GetFps)'
+
+          $hits = [regex]::Matches($text, [regex]::Escape($from)).Count
+          if ($hits -ne 1) {
+            throw "在 $file 中找到 $hits 处 '$from'，与补丁预期不符，请不要盲目发布"
+          }
+
+          [System.IO.File]::WriteAllText($file, $text.Replace($from, $to))
+          Write-Output 'GetFrameCount 钩子已门控到 EnableSetFps'
+
+      - name: Build UnlockerIsland.dll
+        shell: pwsh
+        run: |
+          $island = (Resolve-Path island-src).Path
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          Import-Module (Join-Path $vsPath 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+          Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -DevCmdArguments '-arch=x64'
+
+          # 上游工程写的是 v145（VS2026 / MSVC 14.50+），当前 windows-latest 还是 VS2022
+          if (-not (Get-ChildItem (Join-Path $vsPath 'VC\Tools\MSVC') -Directory | Where-Object { [version]$_.Name -ge [version]'14.50' })) {
+            Write-Output '没有 v145 工具集，改用 v143'
+            & (Join-Path $island 'scripts\set-platform-toolset.ps1') -Toolset v143
+          }
+
+          # 上游 vcpkg.json 没有 builtin-baseline，还原 MinHook 时补一个固定的 vcpkg commit
+          if (-not $env:VCPKG_BASELINE) {
+            throw 'VCPKG_BASELINE 未设置，无法为上游 vcpkg.json 指定 baseline'
+          }
+
+          $manifest = Join-Path $island 'vcpkg.json'
+          $json = Get-Content $manifest -Raw | ConvertFrom-Json
+          if (-not [bool]($json.PSObject.Properties.Name -contains 'builtin-baseline')) {
+            $json | Add-Member -NotePropertyName 'builtin-baseline' -NotePropertyValue $env:VCPKG_BASELINE
+            $json | ConvertTo-Json -Depth 5 | Set-Content $manifest -Encoding utf8
+            Write-Output "vcpkg.json 钉到 baseline $env:VCPKG_BASELINE"
+          }
+
+          # MinHook 在清单模式下由 MSBuild 自动还原，但要先装上 vcpkg 集成
+          & (Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe') integrate install
+
+          # 共享内存布局是启动器和注入模块之间唯一的约定，上游改字段顺序就会静默写错偏移，
+          # 所以先用上游自己的 HookEnvironment.h 编一个 offsetof 探针，再拿探针去核对
+          # IslandHookEnvironment.cs / IslandState.cs 里声明的常量，不在 YAML 里抄第二份表。
+          Copy-Item 'scripts\island-layout-probe.cpp' (Join-Path $island 'layout_probe.cpp') -Force
+          Push-Location $island
+          try {
+            cl /nologo /std:c++20 /EHsc /MD /I. layout_probe.cpp /Fe:layout_probe.exe
+            if ($LASTEXITCODE -ne 0) { throw "布局探针编译失败，退出码 $LASTEXITCODE" }
+            $probe = .\layout_probe.exe | Out-String
+          }
+          finally {
+            Pop-Location
+          }
+
+          $values = @{}
+          foreach ($line in $probe -split '\r?\n') {
+            if ($line -match '^(\w+)=(\d+)$') { $values[$matches[1]] = [int]$matches[2] }
+          }
+
+          $envCs = Get-Content 'src/Snap.Hutao/Snap.Hutao/Service/Game/Island/IslandHookEnvironment.cs' -Raw
+          $stateCs = Get-Content 'src/Snap.Hutao/Snap.Hutao/Service/Game/Island/IslandState.cs' -Raw
+
+          $drift = @()
+          foreach ($m in [regex]::Matches($envCs, 'public const int (?<name>\w+?)Offset = (?<value>\d+);')) {
+            $name = $m.Groups['name'].Value
+            $expected = [int]$m.Groups['value'].Value
+            if (-not $values.ContainsKey($name)) { $drift += "$name 已不在 HookEnvironment 中"; continue }
+            if ($values[$name] -ne $expected) { $drift += "$name 探针=$($values[$name]) C#=$expected" }
+          }
+
+          $csSize = [int][regex]::Match($envCs, 'public const int Size = (?<value>\d+);').Groups['value'].Value
+          if ($values['Size'] -ne $csSize) { $drift += "sizeof(HookEnvironment) 探针=$($values['Size']) C#=$csSize" }
+
+          foreach ($m in [regex]::Matches($stateCs, '\b(?<name>None|Error|Started|Stopped) = (?<value>\d+)')) {
+            $key = 'State' + $m.Groups['name'].Value
+            $expected = [int]$m.Groups['value'].Value
+            if ($values[$key] -ne $expected) { $drift += "IslandState.$($m.Groups['name'].Value) 探针=$($values[$key]) C#=$expected" }
+          }
+
+          if ($drift) {
+            $drift | ForEach-Object { Write-Output "布局不匹配：$_" }
+            throw 'IslandHookEnvironment.cs / IslandState.cs 与上游 HookEnvironment.h 已经不一致，先同步再发布'
+          }
+          Write-Output "布局一致：$($values['Size']) 字节，核对 $($values.Count) 个值"
+
+          msbuild (Join-Path $island 'src\Snap.Hutao.Remastered.UnlockerIsland.sln') `
+            /t:Snap_Hutao_Remastered_UnlockerIsland `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /m
+
+          $built = Join-Path $island 'src\x64\Release\Snap.Hutao.Remastered.UnlockerIsland.dll'
+          if (-not (Test-Path $built)) {
+            throw "msbuild 成功但没有产出 $built"
+          }
+
+          # 模块用不带 Global\ 前缀的名字打开这段映射，和 IslandInterop.cs 是唯一的契约，
+          # 上游改名后这里失败，而不是打出一个注入即静默失效的包。
+          $text = [System.Text.Encoding]::Unicode.GetString([System.IO.File]::ReadAllBytes($built))
+          if (-not $text.Contains('4F3E8543-40F7-4808-82DC-21E48A6037A7')) {
+            throw '构建出的 UnlockerIsland.dll 缺少映射名，IPC 契约已与本项目不匹配'
+          }
+
+          $target = 'src/Snap.Hutao/Snap.Hutao/Resource/Island/Snap.Hutao.Remastered.UnlockerIsland.dll'
+          Write-Output "用构建产物覆盖 $target（$((Get-Item $built).Length) 字节）"
+          Copy-Item $built $target -Force
+
+      - name: Checkout Yae
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.YAE_REPO }}
+          ref: ${{ env.YAE_SHA }}
+          path: yae-src
+
+      - name: Build YaeAchievementLib.dll
+        shell: pwsh
+        run: |
+          # 上游的发布配方就是在 YaeAchievementLib 目录里跑一次 dotnet publish（NativeAOT，net9.0-windows）。
+          # 用 SDK 10 构建 net9.0 目标已在本机验证过，AOT 包按目标框架自动还原。
+          Push-Location yae-src/YaeAchievementLib
+          try {
+            dotnet publish -c Release
+            if ($LASTEXITCODE -ne 0) {
+              throw "dotnet publish 失败，退出码 $LASTEXITCODE"
+            }
+          }
+          finally {
+            Pop-Location
+          }
+
+          $built = 'yae-src/YaeAchievementLib/bin/Release/net9.0-windows/win-x64/native/YaeAchievementLib.dll'
+          if (-not (Test-Path $built)) {
+            throw "dotnet publish 成功但没有产出 $built"
+          }
+
+          # 启动器按导出名 YaeMain 远程线程注入，导出名是唯一的契约，
+          # 上游改名后这里失败，而不是打出一个注入即静默失效的成就导出包。
+          $text = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($built))
+          if (-not $text.Contains('YaeMain')) {
+            throw '构建出的 YaeAchievementLib.dll 缺少 YaeMain 导出，注入契约已与本项目不匹配'
+          }
+
+          $target = 'src/Snap.Hutao/Snap.Hutao/Resource/Yae/YaeAchievementLib.dll'
+          Write-Output "用构建产物覆盖 $target（$((Get-Item $built).Length) 字节）"
+          Copy-Item $built $target -Force
+
+      - name: Build Snap.Hutao.Deployment.exe
+        shell: pwsh
+        run: |
+          # 更新器源码就在本仓库，免打包 WinUI 3 出单文件 exe，随主包分发。
+          # 不能用 -o：dotnet 会把 -o 的目录名拼进 XAML 资源名（Files/xxxMainWindow.xbf），
+          # 产物启动即 XamlParseException，只能发布到默认的 publish 子目录再取。
+          dotnet publish src/Snap.Hutao/Snap.Hutao.Deployment/Snap.Hutao.Deployment.csproj -c Release
+          if ($LASTEXITCODE -ne 0) {
+            throw "dotnet publish 失败，退出码 $LASTEXITCODE"
+          }
+
+          $built = 'src/Snap.Hutao/Snap.Hutao.Deployment/bin/Release/net10.0-windows10.0.26100.0/win-x64/publish/Snap.Hutao.Deployment.exe'
+          if (-not (Test-Path $built)) {
+            throw "dotnet publish 成功但没有产出 $built"
+          }
+
+          # 资源名一旦被目录名污染，更新器双击即崩，这里宁可在 CI 里失败
+          $pri = 'src/Snap.Hutao/Snap.Hutao.Deployment/bin/Release/net10.0-windows10.0.26100.0/win-x64/Snap.Hutao.Deployment.pri'
+          $makepri = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makepri.exe' | Select-Object -Last 1
+          $dump = Join-Path $env:RUNNER_TEMP 'deployment.pri.xml'
+          $null = & $makepri.FullName dump /if $pri /of $dump /o
+          $index = Get-Content $dump -Raw
+          if ($index -notmatch 'name="MainWindow\.xbf"' -or $index -match 'name="\w+MainWindow\.xbf"') {
+            throw "更新器的 XAML 资源索引名被污染，MainWindow.xbf 未以裸名登记在 Files 下"
+          }
+
+          # 安装完要靠包名找回已安装的包来重启，两处必须逐字一致
+          [xml]$manifest = Get-Content 'src/Snap.Hutao/Snap.Hutao/Package.appxmanifest' -Raw -Encoding utf8
+          $identity = $manifest.Package.Identity.Name
+          $source = Get-Content 'src/Snap.Hutao/Snap.Hutao.Deployment/UpdaterFlow.cs' -Raw
+          if ($source -notmatch ('const string PackageName = "' + [regex]::Escape($identity) + '";')) {
+            throw "更新器里的 PackageName 与清单 Identity Name '$identity' 不一致"
+          }
+
+          $target = 'src/Snap.Hutao/Snap.Hutao/Resource/Deployment/Snap.Hutao.Deployment.exe'
+          Write-Output "用构建产物覆盖 $target（$((Get-Item $built).Length) 字节）"
+          Copy-Item $built $target -Force
+
+      - name: Build Snap.Hutao.Native
+        shell: pwsh
+        run: |
+          # 自建的注入组件、提权引导程序和提权助手（C++），构建完由 CMake 的 POST_BUILD 刷进 Resource
+          cmake -S src/Snap.Hutao/Snap.Hutao.Native -B build/native -A x64
+          if ($LASTEXITCODE -ne 0) {
+            throw "cmake configure 失败，退出码 $LASTEXITCODE"
+          }
+
+          cmake --build build/native --config Release
+          if ($LASTEXITCODE -ne 0) {
+            throw "cmake build 失败，退出码 $LASTEXITCODE"
+          }
+
+          $built = 'src/Snap.Hutao/Snap.Hutao/Resource/Native/Snap.Hutao.Native.Ext.dll'
+          if (-not (Test-Path $built)) {
+            throw "msbuild 成功但没有产出 $built"
+          }
+
+          # 桌面快捷方式（提权启动）依赖这个引导程序，缺了功能会静默失效
+          $launcher = 'src/Snap.Hutao/Snap.Hutao/Resource/Native/Snap.Hutao.Elevated.Launcher.exe'
+          if (-not (Test-Path $launcher)) {
+            throw "msbuild 成功但没有产出 $launcher"
+          }
+
+          # 导出名是和 C# 侧 NativeLibrary.GetExport 的硬契约，改了这里要同步改 DllInjectionUtilities
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $built))
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+          foreach ($export in 'HutaoInjectUsingRemoteThread', 'HutaoInjectUsingRemoteThreadWithFunction') {
+            if (-not $text.Contains($export)) {
+              throw "构建出的 Snap.Hutao.Native.Ext.dll 缺少导出 $export"
+            }
+          }
+
+          # 提权助手，随主包放在 Resource\FpsUnlock，缺了解帧注入会静默失效
+          $fullTrust = 'src/Snap.Hutao/Snap.Hutao/Resource/FpsUnlock/Snap.Hutao.FullTrust.exe'
+          if (-not (Test-Path $fullTrust)) {
+            throw "cmake build 成功但没有产出 $fullTrust"
+          }
+
+      - name: Cake
+        shell: pwsh
+        run: dotnet tool restore && dotnet cake
+        env:
+          HUTAO_VERSION: ${{ steps.version.outputs.version }}
+          CERTIFICATE: ${{ secrets.CERTIFICATE }}
+          PW: ${{ secrets.PW }}
+
+      - name: Generate SHA256SUMS
+        shell: pwsh
+        run: |
+          Push-Location src/output
+          $lines = Get-ChildItem -File | Where-Object Name -ne 'SHA256SUMS' | ForEach-Object {
+            '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
+          }
+          Set-Content -Path SHA256SUMS -Value $lines -Encoding ascii
+          Pop-Location
+
+          Get-Content src/output/SHA256SUMS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: HutaoLauncher-${{ steps.version.outputs.version }}
+          path: src/output/*
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+
+          $notes = @'
+          由 CI 自动构建，并使用 silveridc 自签名证书签名。
+
+          ## 安装
+
+          自签名的 MSIX 必须先信任签名证书才能安装，**首次安装**按以下步骤操作：
+
+          1. 下载 `HutaoLauncher.cer`，用**管理员** PowerShell 导入证书：
+
+          ```powershell
+          certutil -addstore -f Root HutaoLauncher.cer
+          certutil -addstore -f TrustedPeople HutaoLauncher.cer
+          ```
+
+          2. 安装 MSIX：
+
+          ```powershell
+          Add-AppxPackage .\HutaoLauncher-__VERSION__.msix
+          ```
+
+          证书只需导入一次，之后的新版本可以直接覆盖安装。
+
+          ## 校验
+
+          ```powershell
+          certutil -hashfile HutaoLauncher-__VERSION__.msix SHA256
+          ```
+
+          与 `SHA256SUMS` 中的值比对。
+          '@.Replace('__VERSION__', $version)
+
+          Set-Content -Path RELEASE_NOTES.md -Value $notes -Encoding utf8
+
+          $assets = (Get-ChildItem src/output -File).FullName
+          gh release create '${{ github.ref_name }}' $assets `
+            --title "胡桃启动器 $version" `
+            --notes-file RELEASE_NOTES.md

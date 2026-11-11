@@ -1,0 +1,40 @@
+// Copyright (c) zhaoyj. All rights reserved.
+// Licensed under the MIT license.
+
+using Snap.Hutao.Rev.Win32;
+using System.IO;
+
+namespace Snap.Hutao.Rev.Core.IO;
+
+internal static class LogicalDrive
+{
+    public static long GetAvailableFreeSpace(ValueDirectory directory)
+    {
+        if (!directory.HasValue)
+        {
+            return 0;
+        }
+
+        string path = directory;
+        if (!path.EndsWith('\\'))
+        {
+            path += '\\';
+        }
+
+        if (Uri.TryCreate(path, UriKind.Absolute, out Uri? pathUri) && pathUri.IsUnc)
+        {
+            return NativeSystem.GetDiskFreeSpace(path);
+        }
+
+        try
+        {
+            string? root = Path.GetPathRoot(path);
+            ArgumentException.ThrowIfNullOrWhiteSpace(root, "The path does not contain a root.");
+            return new DriveInfo(root).AvailableFreeSpace;
+        }
+        catch (ArgumentException)
+        {
+            return NativeSystem.GetDiskFreeSpace(path);
+        }
+    }
+}

@@ -1,0 +1,19 @@
+// Copyright (c) zhaoyj. All rights reserved.
+// Licensed under the MIT license.
+
+namespace Snap.Hutao.Rev.Web.Hutao.Wallpaper;
+
+internal sealed class Wallpaper
+{
+    [JsonPropertyName("url")]
+    public required Uri Url { get; init; }
+
+    [JsonPropertyName("source_url")]
+    public required Uri SourceUrl { get; init; }
+
+    [JsonPropertyName("author")]
+    public required string Author { get; init; }
+
+    [JsonPropertyName("uploader")]
+    public required string Uploader { get; init; }
+}
