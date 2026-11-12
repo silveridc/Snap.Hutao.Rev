@@ -1,8 +1,6 @@
 // Copyright (c) zhaoyj. All rights reserved.
 // Licensed under the MIT license.
 
-using System.ComponentModel;
-
 namespace Snap.Hutao.Rev.Win32.Foundation;
 
 // ReSharper disable InconsistentNaming

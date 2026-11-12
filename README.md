@@ -1,144 +1,80 @@
+<!--<p align="center">
+  <img src="https://github.com/user-attachments/assets/976e057c-f01e-486b-9fa0-04744ae96f99" alt="Snap Hutao Rev Banner" width="600"/>
+</p>-->
+
+<h1 align="center">Snap Hutao Rev</h1>
+
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/976e057c-f01e-486b-9fa0-04744ae96f99" alt="Snap Hutao Banner" width="600"/>
+  🎮 开源的原神工具箱，专为 Windows 平台设计，改善桌面端玩家的游戏体验<br/>
+  🎮  An open-source Genshin Impact toolkit for Windows, designed to improve the desktop gaming experience
 </p>
-
-<h1 align="center">Snap Hutao</h1>
-
-<p align="center">
-  🎮 开源的原神工具箱，专为 Windows 平台设计，改善桌面端玩家的游戏体验  
-  <br/>
-  🎮 An open-source Genshin Impact toolkit for Windows, designed to improve the desktop gaming experience
-</p>
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center" style="padding:0 10px;">
-        <b>Latest CI/CD Build</sub>
-      </td>
-      <td align="center" style="padding:0 10px;">
-        <b>Latest Release</sub>
-      </td>
-      <td align="center" style="padding:0 10px;">
-        <b>Downloads</sub>
-      </td>
-    </tr>
-    <tr>
-      <td align="center" style="padding:0 10px;">
-        <a href="https://ci.appveyor.com/project/DGP-Studio/snap-hutao">
-          <img src="https://ci.appveyor.com/api/projects/status/n4s40t9llru4si9y?svg=true" alt="Build Status"/>
-        </a>
-      </td>
-      <td align="center" style="padding:0 10px;">
-        <a href="https://github.com/DGP-Studio/Snap.Hutao/releases/latest">
-          <img src="https://img.shields.io/github/release/DGP-Studio/Snap.Hutao?style=flat" alt="Release"/>
-        </a>
-      </td>
-      <td align="center" style="padding:0 10px;">
-        <img src="https://img.shields.io/github/downloads/DGP-Studio/Snap.Hutao/total.svg?style=flat" alt="Downloads"/>
-      </td>
-    </tr>
-  </table>
-</div>
-
 
 ---
 
 ## 📖 简介 / Introduction
 
-**中文**  
-胡桃工具箱是一款以 MIT 协议开源的原神工具箱，专为现代化 Windows 平台设计，旨在改善桌面端玩家的游戏体验。
+**中文**
+Snap Hutao Rev 是 Snap Hutao 的fork，原项目上游仓库已不可访问，本仓库独立维护，并按 MIT 协议保留原版权声明。
 
-**English**  
-Snap Hutao is an open-source Genshin Impact toolkit under MIT license, designed for modern Windows platform to improve the gaming experience for desktop players.
+**English**
+Snap Hutao Rev is a fork of Snap Hutao. The original project's upstream repository is no longer accessible, so this repo is independently maintained and keeps the original copyright notice under the MIT license.
 
 ---
 
 ## 🚀 安装 / Installation
 
-**中文**  
-你可以按照 [快速开始](https://hut.ao/zh/quick-start.html) 文档中提供的流程安装并设置 Snap Hutao。  
-
-**English**  
-You can follow the instructions in the [Quick Start](https://hut.ao/en/quick-start.html) document to install and set up Snap Hutao.  
+从本仓库的 Release 页面下载 MSIX 安装包，签名证书与包信息见对应 Release 说明。系统要求：Windows 10 1903+ / Windows 11，x64。
 
 ---
 
-## 🌍 本地化翻译 / Localization
+## 🛠️ 构建 / Build
 
-Snap Hutao 使用 [Crowdin](https://translate.hut.ao/) 作为客户端文本翻译平台，在该平台上你可以为你熟悉的语言提交翻译文本。我们感谢每一个为 Snap Hutao 做出贡献的社区成员，并且欢迎更多的朋友能参与到这个项目中。  
+- 环境：Windows 10 1903+ / 11 x64，Visual Studio 2026（.NET 10 + Windows App SDK 工作负载）
+- 打开解决方案 [`src/Snap.Hutao.slnx`](src/Snap.Hutao.slnx)，平台选择 `x64`，F5 即可构建调试
+- 打包与 CI 使用同一套 Cake 脚本：`dotnet tool restore && dotnet cake`
+- 注意：命令行构建前请先关闭 Visual Studio，避免 `obj` 目录竞争导致的 `WMC0001` 一类构建错误
 
-Snap Hutao uses [Crowdin](https://translate.hut.ao/) as a client text translation platform where you can submit translated text for languages you are familiar with. We are grateful to every community member who has contributed to Snap Hutao and welcome more friends to participate in this project.  
-
-| Language | Status |  
-|----------|--------|  
-| zh-TW | [![zh-TW](https://img.shields.io/badge/dynamic/json?color=blue&label=zh-TW&style=flat&logo=crowdin&query=%24.zh-TW&url=https%3A%2F%2Fawesome-crowdin-proxy.qhy040404.workers.dev%2Fstats-15670597-565845.json)](https://crowdin.com/project/snap-hutao) |  
-| en | [![en](https://img.shields.io/badge/dynamic/json?color=blue&label=en&style=flat&logo=crowdin&query=%24.en&url=https%3A%2F%2Fawesome-crowdin-proxy.qhy040404.workers.dev%2Fstats-15670597-565845.json)](https://crowdin.com/project/snap-hutao) |  
-| fr | [![fr](https://img.shields.io/badge/dynamic/json?color=blue&label=fr&style=flat&logo=crowdin&query=%24.fr&url=https%3A%2F%2Fawesome-crowdin-proxy.qhy040404.workers.dev%2Fstats-15670597-565845.json)](https://crowdin.com/project/snap-hutao) |  
-| id | [![id](https://img.shields.io/badge/dynamic/json?color=blue&label=id&style=flat&logo=crowdin&query=%24.id&url=https%3A%2F%2Fawesome-crowdin-proxy.qhy040404.workers.dev%2Fstats-15670597-565845.json)](https://crowdin.com/project/snap-hutao) |  
-| ja | [![ja](https://img.shields.io/badge/dynamic/json?color=blue&label=ja&style=flat&logo=crowdin&query=%24.ja&url=https%3A%2F%2Fawesome-crowdin-proxy.qhy040404.workers.dev%2Fstats-15670597-565845.json)](https://crowdin.com/project/snap-hutao) |  
-| ko | [![ko](https://img.shields.io/badge/dynamic/json?color=blue&label=ko&style=flat&logo=crowdin&query=%24.ko&url=https%3A%2F%2Fawesome-crowdin-proxy.qhy040404.workers.dev%2Fstats-15670597-565845.json)](https://crowdin.com/project/snap-hutao) |  
-| pt-PT | [![pt-PT](https://img.shields.io/badge/dynamic/json?color=blue&label=pt-PT&style=flat&logo=crowdin&query=%24.pt-PT&url=https%3A%2F%2Fawesome-crowdin-proxy.qhy040404.workers.dev%2Fstats-15670597-565845.json)](https://crowdin.com/project/snap-hutao) |  
-| ru | [![ru](https://img.shields.io/badge/dynamic/json?color=blue&label=ru&style=flat&logo=crowdin&query=%24.ru&url=https%3A%2F%2Fawesome-crowdin-proxy.qhy040404.workers.dev%2Fstats-15670597-565845.json)](https://crowdin.com/project/snap-hutao) |  
-| vi | [![vi](https://img.shields.io/badge/dynamic/json?color=blue&label=vi&style=flat&logo=crowdin&query=%24.vi&url=https%3A%2F%2Fawesome-crowdin-proxy.qhy040404.workers.dev%2Fstats-15670597-565845.json)](https://crowdin.com/project/snap-hutao) |  
+手动构建与提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ---
 
-## 🛠️ 贡献 / Contribute
+## 📁 目录结构 / Layout
 
-- [向我们提交 PR / Make Pull Requests](https://hut.ao/development/contribute.html)  
-- [为我们更新文档 / Enhance our Document](https://github.com/DGP-Studio/Snap.Hutao.Docs)  
-- [通过 DeepWiKi 了解项目结构 / Understand Project Structure with DeepWiKi](https://deepwiki.com/DGP-Studio/Snap.Hutao)  
-  - [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/DGP-Studio/Snap.Hutao)  
-
----
-
-## 🙏 特别感谢 / Special Thanks
-
-- [HolographicHat](https://github.com/HolographicHat)  
-- [UIGF organization](https://uigf.org)  
-
-**特定的原神项目 / Specific Genshin-related Projects**  
-- [Scighost/Starward](https://github.com/Scighost/Starward)  
+| 路径 | 说明 |
+|---|---|
+| `src/Snap.Hutao` | WinUI 3 客户端 |
+| `src/Snap.Hutao.Test` | 单元测试 |
+| `src/Snap.Hutao.Deployment` | 自更新器 |
+| `src/Snap.Hutao.Native` | FullTrust 注入、Island 等原生组件 |
+| `ServerHosts.cs` | 后端地址配置 |
+| `build.cake` | 打包、生成清单与签名流程 |
+| `res` | Logo 与仓库素材 |
 
 ---
 
-## ⚙️ 使用的技术栈 / Tech Stack
+## 🙏 致谢 / Special Thanks
 
-- [CommunityToolkit/dotnet](https://github.com/CommunityToolkit/dotnet)  
-- [CommunityToolkit/Labs-Windows](https://github.com/CommunityToolkit/Labs-Windows)  
-- [CommunityToolkit/Windows](https://github.com/CommunityToolkit/Windows)  
-- [dotnet/efcore](https://github.com/dotnet/efcore)  
-- [dotnet/runtime](https://github.com/dotnet/runtime)  
-- [microsoft/vs-validation](https://github.com/microsoft/vs-validation)  
-- [microsoft/WindowsAppSDK](https://github.com/microsoft/WindowsAppSDK)  
-- [microsoft/microsoft-ui-xaml](https://github.com/microsoft/microsoft-ui-xaml)  
-- [quartznet/quartznet](https://github.com/quartznet/quartznet)  
+- 原项目 Snap Hutao 及 [DGP Studio](https://github.com/DGP-Studio)
+- [HolographicHat](https://github.com/HolographicHat)
+- [UIGF organization](https://uigf.org)
+- [genshin-fps-unlock](https://github.com/34736384/genshin-fps-unlock)
+- [Snap.Hutao.Remastered.UnlockerIsland](https://github.com/SnapHutaoRemasteringProject/Snap.Hutao.Remastered.UnlockerIsland)
+---
+
+## ⚙️ 技术栈 / Tech Stack
+
+- [CommunityToolkit/dotnet](https://github.com/CommunityToolkit/dotnet)
+- [CommunityToolkit/Labs-Windows](https://github.com/CommunityToolkit/Labs-Windows)
+- [CommunityToolkit/Windows](https://github.com/CommunityToolkit/Windows)
+- [dotnet/efcore](https://github.com/dotnet/efcore)
+- [dotnet/runtime](https://github.com/dotnet/runtime)
+- [microsoft/vs-validation](https://github.com/microsoft/vs-validation)
+- [microsoft/WindowsAppSDK](https://github.com/microsoft/WindowsAppSDK)
+- [microsoft/microsoft-ui-xaml](https://github.com/microsoft/microsoft-ui-xaml)
+- [quartznet/quartznet](https://github.com/quartznet/quartznet)
 
 ---
 
-## ❤️ 赞助商 / Sponsorship
+## 📜 许可 / License
 
-Snap Hutao is currently using sponsored software from the following service providers.  
-
-<img src="./res/assets/readmeSponsors.svg" alt="Readme Sponsors" />
-
-- 🏠 [Netlify](https://www.netlify.com/) provides document and home page hosting service for Snap Hutao  
-- 🌍 [Crowdin](https://crowdin.com/) provides its SaaS platform to help Snap Hutao's localization  
-- 🗄️ [Navicat](https://navicat.com/) provides Snap Hutao with advanced database management tools  
-- 🔒 Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/)  
-- 🔑 [1Password](https://1password.com/) provides Snap Hutao development team with their amazing password management software  
-- 🐳 [DigitalOcean](https://www.digitalocean.com) provides reliable cloud database and container service for Snap Hutao database backup  
-- 📊 [Ducalis.io](https://hi.ducalis.io/) provides Snap Hutao project with a complete decision-making toolkit for project management  
-- ☁️ [Cloudflare](https://www.cloudflare.com/) sponsors Snap Hutao with their Business Plan, ensuring secure, fast, and reliable worldwide connection to our infrastructure  
-- 🔐 [Termius](https://termius.com) provides a secure, reliable, and collaborative SSH client  
-
----
-
-## 📈 开发 / Development
-
-![Snap.Hutao](https://repobeats.axiom.co/api/embed/f029553fbe0c60689b1710476ec8512452163fc9.svg)
-
-[![Star History Chart](https://api.star-history.com/svg?repos=DGP-Studio/Snap.Hutao&type=Date)](https://star-history.com/#DGP-Studio/Snap.Hutao&Date)  
-
-[![](https://opengraph.snapgenshin.cn/gitcode?repo=DGP-Studio/Snap.Hutao)](https://github.com/DGP-Studio/Snap.Hutao)  
+本项目基于 MIT 协议发布，完整文本见 [LICENSE.txt](LICENSE.txt)。原始版权归 DGP Studio 所有，本分支的修改版权归 zhaoyj 所有。

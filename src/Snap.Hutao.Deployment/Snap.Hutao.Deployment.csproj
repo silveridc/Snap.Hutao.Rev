@@ -33,6 +33,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="$(MSBuildProjectDirectory)/../../../ServerHosts.cs" Link="ServerHosts.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)/../../ServerHosts.cs" Link="ServerHosts.cs" />
   </ItemGroup>
 </Project>

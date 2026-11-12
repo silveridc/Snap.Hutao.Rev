@@ -46,7 +46,7 @@
 	  <GenerateDocumentationFile>True</GenerateDocumentationFile>
 	  <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
 	  <PackageCertificateThumbprint>F44425B6AD2D43394DDAB95D21788D77836C36EA</PackageCertificateThumbprint>
-	  <AppxPackageSigningTimestampDigestAlgorithm>SHA512</AppxPackageSigningTimestampDigestAlgorithm>
+	  <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
   </PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)' != 'Debug'">
 		<SelfContained>true</SelfContained>
@@ -60,7 +60,7 @@
 	</PropertyGroup>
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
-    <Compile Include="$(MSBuildProjectDirectory)\..\..\..\ServerHosts.cs" Link="ServerHosts.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\..\..\ServerHosts.cs" Link="ServerHosts.cs" />
     <AppxManifest Include="Package.appxmanifest" Condition="'$(ConfigurationName)'!='Debug'" />
     <AppxManifest Include="Package.development.appxmanifest" Condition="'$(ConfigurationName)'=='Debug'" />
   </ItemGroup>
